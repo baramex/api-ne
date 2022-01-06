@@ -1,6 +1,6 @@
 import axios from "axios";
 import jwt from "jsonwebtoken";
-import { verifUser } from ".";
+import { getProfilFromAccessToken, verifUser } from "./index.js";
 
 const config = {
     auth: {
@@ -49,12 +49,12 @@ export function auth(type, value) {
                             };
                             axios.post("https://api.minecraftservices.com/authentication/login_with_xbox", dataBearerMC, {})
                                 .then(acc => {
-                                    axios.get("https://api.minecraftservices.com/minecraft/profile", { headers: { "Accept": "application/json", "Authorization": "Bearer " + acc.data.access_token } })
-                                        .then(async mc => {
-                                            var a = false;
-                                            await verifUser(mc.data.selectedProfile.id).then(() => a = true).catch(() => a = false);
-                                            res({ auth: acc.data, user: mc.data, refreshToken: auth.refresh_token, discordLinked: a });
-                                        }).catch(err => rej(err.response.data));
+                                    getProfilFromAccessToken(acc.data.access_token)
+                                        .then(mc => {
+                                            verifUser(mc.id).then(discordLinked => {
+                                                res({ auth: acc.data, user: mc, refreshToken: auth.refresh_token, discordLinked, type });
+                                            });
+                                        }).catch(rej);
                                 }).catch(err => rej(err.response.data));
                         }).catch(err => {
                             if (err.response.status == 401) rej({ error: "NoMinecraftAccount", errorMessage: "no-message" });
@@ -72,22 +72,23 @@ function refresh(refreshToken) {
 }
 
 function validate(accessToken) {
-    if (!accessToken) return false;
-    if (jwt.decode(accessToken).exp * 1000 > new Date().getTime()) return true;
-    else return false;
+    return new Promise((res, rej) => {
+        if (!accessToken) rej();
+        if (jwt.decode(accessToken).exp * 1000 > new Date().getTime()) {
+            getProfilFromAccessToken(accessToken).then(res).catch(() => rej);
+        }
+        else rej();
+    });
 }
 
-export function token(accessToken, refreshToken, uuid) {
+export function token(accessToken, refreshToken) {
     return new Promise((res, rej) => {
-        getProfilFromAccessToken(accessToken).then((profile) => {
-            verifUser(profile.selectedProfile.id).then(() => {
-                if (validate(accessToken)) {
-                    res(true);
-                }
-                else {
-                    refresh(refreshToken).then(res).catch(rej);
-                }
-            }).catch(() => rej({ discordLinked: false }));
-        }).catch(rej);
+        validate(accessToken).then(profile => {
+            verifUser(profile.id).then(discordLinked => {
+                res({ discordLinked, type: "valid" });
+            });
+        }).catch(() => {
+            refresh(refreshToken).then(res).catch(rej);
+        });
     });
 }

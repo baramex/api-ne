@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getProfilFromAccessToken, verifUser } from ".";
+import { getProfilFromAccessToken, verifUser } from "./index.js";
 
 export function auth(username, password) {
     return new Promise((res, rej) => {
@@ -9,10 +9,10 @@ export function auth(username, password) {
             },
             username,
             password,
-        }, { headers: { "Content-Type": "application/json" } }).then(async r => {
-            var a = false;
-            await verifUser(r.data.selectedProfile.id).then(() => a = true).catch(() => a = false);
-            res({ ...r.data, discordLinked: a });
+        }, { headers: { "Content-Type": "application/json" } }).then(r => {
+            verifUser(r.data.selectedProfile.id).then(discordLinked => {
+                res({ ...r.data, discordLinked, type: "login" });
+            });
         }).catch(err => rej(err.response.data));
     });
 }
@@ -22,7 +22,11 @@ function refresh(accessToken, clientToken) {
         axios.post("https://authserver.mojang.com/refresh", {
             accessToken,
             clientToken
-        }, { headers: { "Content-Type": "application/json" } }).then(r => res(r.data)).catch(err => rej(err.response.data));
+        }, { headers: { "Content-Type": "application/json" } }).then(r => {
+            verifUser(r.data.selectedProfile.id).then(discordLinked => {
+                res({ ...r.data, discordLinked, type: "refresh" });
+            });
+        }).catch(err => rej(err.response.data));
     });
 }
 
@@ -42,15 +46,15 @@ function validate(accessToken, clientToken) {
 }
 
 export function token(accessToken, clientToken) {
-    return new Promise(async (res, rej) => {
-        getProfilFromAccessToken(accessToken).then((profile) => {
-            verifUser(profile.selectedProfile.id).then(() => {
-                validate(accessToken, clientToken).then(() => {
-                    res(true)
-                }).catch(() => {
-                    refresh(accessToken, clientToken).then(res).catch(rej);
+    return new Promise((res, rej) => {
+        validate(accessToken, clientToken).then(() => {
+            getProfilFromAccessToken(accessToken).then((profile) => {
+                verifUser(profile.id).then(discordLinked => {
+                    res({ discordLinked, type: "valid" });
                 });
-            }).catch(() => rej({ discordLinked: false }));
-        }).catch(rej);
+            }).catch(rej);
+        }).catch(() => {
+            refresh(accessToken, clientToken).then(res).catch(rej);
+        });
     });
 }
