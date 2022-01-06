@@ -20,6 +20,11 @@ export var db;
  */
 const runType = "Dev";
 
+const guildID = "918065722016542771";
+const clientID = "918066264029671494";
+const clientSecret = "B4yr9o9a6xFHKPibB0PUlHObks6OQcIR";
+const botToken = "OTE4MDY2MjY0MDI5NjcxNDk0.YbB11g.60RxOgG-thHLmOonP0SO1aSRcJA";
+
 MongoClient.connect(runType == "Dev" ? "mongodb://localhost:27017/" : 'mongodb://baramex:***REMOVED***@localhost:27017/', function (err, client) {
     console.log("Connected successfully to mongodb");
     db = client.db(dbName + (runType == "Dev" ? "-dev" : ""));
@@ -77,6 +82,52 @@ app.post("/mojang/invalidate", (req, res) => {
     else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or client token are null" });
 });
 
+app.post("/discord-auth", (req, res) => {
+    if (req.body && req.body.code && req.body.accessToken && req.body.redirectUri) {
+        axios.post("https://discord.com/api/oauth2/token", `client_id=${clientID}&client_secret=${clientSecret}&grant_type=authorization_code&code=${req.body.code}&redirect_uri=${req.body.redirectUri}`, { 'Content-Type': 'application/x-www-form-urlencoded' }).then(result => {
+            var accessToken = result.data.access_token;
+            var tokenType = result.data.token_type;
+
+            getProfilFromAccessToken(req.body.accessToken).then(mc => {
+                axios.get("https://discord.com/api/users/@me", { headers: { authorization: tokenType + " " + accessToken } }).then(user => {
+                    axios.get("https://discord.com/api/users/@me/guilds", { headers: { authorization: tokenType + " " + accessToken } }).then(r => {
+                        if (r.data.find(a => a.id == guildID)) {
+                            res.status(200).json({ addToServer: false });
+                            updateMinecraftAccount(user.data.id, mc.id);
+                            revokeToken(accessToken);
+                        }
+                        else {
+
+                            axios.put("https://discord.com/api/guilds/" + guildID + "/members/" + user.data.id, { access_token: accessToken }, { headers: { "Content-Type": "application/json", authorization: "Bot " + botToken } })
+                                .then(() => {
+                                    res.status(200).json({ addToServer: true });
+                                    updateMinecraftAccount(user.data.id, mc.id);
+                                    revokeToken(accessToken);
+                                }).catch(err => res.status(400).json(err.response.data));
+                        }
+                    }).catch(err => res.status(400).json(err.response.data));
+                }).catch(err => res.status(400).json(err.response.data));
+            }).catch(() => {
+                res.status(400).json({ error: "InvalidToken", messageError: "Account not found" });
+            });
+        }).catch(err => res.status(400).json(err.response.data));
+    }
+    else {
+        res.status(400).json({ error: "InvalidBody", messageError: "Code and/or access token and/or redirect uri are null" });
+    }
+});
+
+function revokeToken(accessToken) {
+    return new Promise((res, rej) => {
+        axios.post("https://discord.com/api/oauth2/token/revoke", `client_id=${clientID}&client_secret=${clientSecret}&token=${accessToken}`, { headers: { "Content-Type": "application/x-www-form-urlencoded" } })
+            .then(r => res(r.data)).catch(r => rej(r.response.data));
+    });
+}
+
+function updateMinecraftAccount(discordID, uuid) {
+    db.collection("members-mc").findOneAndUpdate({ uuid }, { $set: { discordID } }).catch(console.error);
+}
+
 export function generateID() {
     var a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".split("");
     var b = "";
@@ -91,13 +142,7 @@ export function verifUser(uuid) {
     return new Promise((res, rej) => {
         if (!uuid) res(false);
         db.collection("members-mc").findOne({ uuid }).then(user => {
-            /*
-            _id
-            discordID
-            uuid
-            date
-            */
-            axios.get("http://localhost:4001/requests/discord/member?id=" + user.discordID).then(user => {
+            axios.get("https://discord.com/api/guilds/" + guildID + "/members/" + user.discordID, { headers: { authorization: "Bot " + botToken } }).then(user => {
                 if (user) res(true);
                 else res(false);
             }).catch(() => res(false));
