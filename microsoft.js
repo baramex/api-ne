@@ -1,4 +1,6 @@
-import { axios, db, generateID, jwt, verifUser } from "./index";
+import axios from "axios";
+import jwt from "jsonwebtoken";
+import { verifUser } from ".";
 
 const config = {
     auth: {
@@ -77,15 +79,15 @@ function validate(accessToken) {
 
 export function token(accessToken, refreshToken, uuid) {
     return new Promise((res, rej) => {
-        var a = false;
-        await verifUser(uuid).then(() => a = true).catch(() => a = false);
-        if (!a) return rej({ discordLinked: false });
-
-        if (validate(accessToken)) {
-            res(true);
-        }
-        else {
-            refresh(refreshToken).then(res).catch(rej);
-        }
+        getProfilFromAccessToken(accessToken).then((profile) => {
+            verifUser(profile.selectedProfile.id).then(() => {
+                if (validate(accessToken)) {
+                    res(true);
+                }
+                else {
+                    refresh(refreshToken).then(res).catch(rej);
+                }
+            }).catch(() => rej({ discordLinked: false }));
+        }).catch(rej);
     });
 }

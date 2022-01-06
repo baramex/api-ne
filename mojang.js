@@ -1,4 +1,5 @@
-import { axios } from "./index";
+import axios from "axios";
+import { getProfilFromAccessToken, verifUser } from ".";
 
 export function auth(username, password) {
     return new Promise((res, rej) => {
@@ -10,8 +11,7 @@ export function auth(username, password) {
             password,
         }, { headers: { "Content-Type": "application/json" } }).then(async r => {
             var a = false;
-            //??
-            await verifUser(r.data.uuid).then(() => a = true).catch(() => a = false);
+            await verifUser(r.data.selectedProfile.id).then(() => a = true).catch(() => a = false);
             res({ ...r.data, discordLinked: a });
         }).catch(err => rej(err.response.data));
     });
@@ -41,16 +41,16 @@ function validate(accessToken, clientToken) {
     });
 }
 
-export function token(accessToken, clientToken, uuid) {
+export function token(accessToken, clientToken) {
     return new Promise(async (res, rej) => {
-        var a = false;
-        await verifUser(uuid).then(() => a = true).catch(() => a = false);
-        if(!a) return rej({discordLinked: false});
-
-        validate(accessToken, clientToken).then(() => {
-            res(true);
-        }).catch(() => {
-            refresh(accessToken, clientToken).then(res).catch(rej);
-        });
+        getProfilFromAccessToken(accessToken).then((profile) => {
+            verifUser(profile.selectedProfile.id).then(() => {
+                validate(accessToken, clientToken).then(() => {
+                    res(true)
+                }).catch(() => {
+                    refresh(accessToken, clientToken).then(res).catch(rej);
+                });
+            }).catch(() => rej({ discordLinked: false }));
+        }).catch(rej);
     });
 }

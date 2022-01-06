@@ -1,13 +1,10 @@
-const app = require("express")();
+import express from "express";
+const app = express();
 const server = app.listen(3521);
 
-export const jwt = require("jsonwebtoken");
-/**
- * @type {axios.Axios}
- */
-export const axios = require("axios");
+import axios from "axios";
 
-const mongo = require('mongodb');
+import mongo from "mongodb";
 const MongoClient = mongo.MongoClient;
 const dbName = 'new-empires';
 /**
@@ -42,12 +39,12 @@ app.post("/microsoft/login", (req, res) => {
 });
 
 app.post("/microsoft/token", (req, res) => {
-    if (req.body && req.body.accessToken && req.body.refreshToken && req.query.uuid) Microsoft.token(req.body.accessToken, req.body.refreshToken, req.body.uuid).then(r => {
+    if (req.body && req.body.accessToken && req.body.refreshToken) Microsoft.token(req.body.accessToken, req.body.refreshToken).then(r => {
         res.status(r.status).json(r.data);
     }).catch(r => {
         res.status(r.response.status).json(r.response.data);
     });
-    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or refresh token and/or client uuid are null" });
+    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or refresh token are null" });
 });
 
 app.post("/mojang/login", (req, res) => {
@@ -60,12 +57,12 @@ app.post("/mojang/login", (req, res) => {
 });
 
 app.post("/mojang/token", (req, res) => {
-    if (req.body && req.body.accessToken && req.body.clientToken && req.body.uuid) Mojang.token(req.body.accessToken, req.body.clientToken, req.body.uuid).then(r => {
+    if (req.body && req.body.accessToken && req.body.clientToken) Mojang.token(req.body.accessToken, req.body.clientToken).then(r => {
         res.status(r.status).json(r.data);
     }).catch(r => {
         res.status(r.response.status).json(r.response.data);
     });
-    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or client token and/or client uuid are null" });
+    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or client token are null" });
 });
 
 app.post("/mojang/invalidate", (req, res) => {
@@ -106,5 +103,14 @@ export function verifUser(uuid) {
 
             rej();
         });
+    });
+}
+
+export function getProfilFromAccessToken(accessToken) {
+    return new Promise((res, rej) => {
+        axios.get("https://api.minecraftservices.com/minecraft/profile", { headers: { "Accept": "application/json", "Authorization": "Bearer " + accessToken } })
+            .then(mc => {
+                res(mc.data);
+            }).catch(err => rej(err.response.data));
     });
 }
