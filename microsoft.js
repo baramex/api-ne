@@ -1,4 +1,4 @@
-import { axios, db, generateID, jwt } from "./index";
+import { axios, db, generateID, jwt, verifUser } from "./index";
 
 const config = {
     auth: {
@@ -14,7 +14,7 @@ const authCodeUrlParameters = {
 
 export function auth(type, value) {
     return new Promise((res, rej) => {
-        const dataToken = type=="login"?`client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&code=${value}&grant_type=authorization_code&redirect_uri=${authCodeUrlParameters.redirectUri}`:`client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&refresh_token=${value}&grant_type=refresh_token&redirect_uri=${authCodeUrlParameters.redirectUri}`;
+        const dataToken = type == "login" ? `client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&code=${value}&grant_type=authorization_code&redirect_uri=${authCodeUrlParameters.redirectUri}` : `client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&refresh_token=${value}&grant_type=refresh_token&redirect_uri=${authCodeUrlParameters.redirectUri}`;
         axios.post("https://login.live.com/oauth20_token.srf", dataToken, { headers: { "Content-Type": "application/x-www-form-urlencoded" } }).then(data => {
             var auth = data.data;
 
@@ -70,40 +70,22 @@ function refresh(refreshToken) {
 }
 
 function validate(accessToken) {
-    if(!accessToken) return false;
-    if(jwt.decode(accessToken).exp * 1000 > new Date().getTime()) return true;
+    if (!accessToken) return false;
+    if (jwt.decode(accessToken).exp * 1000 > new Date().getTime()) return true;
     else return false;
 }
 
-export function token(accessToken, refreshToken) {
+export function token(accessToken, refreshToken, uuid) {
     return new Promise((res, rej) => {
-        if(validate(accessToken)) {
+        var a = false;
+        await verifUser(uuid).then(() => a = true).catch(() => a = false);
+        if (!a) return rej({ discordLinked: false });
+
+        if (validate(accessToken)) {
             res(true);
         }
         else {
             refresh(refreshToken).then(res).catch(rej);
         }
-    });
-}
-
-function verifUser(uuid) {
-    return new Promise((res, rej) => {
-        if(!uuid) rej();
-        db.collection("members-mc").findOne({uuid}).then(user => {
-            /*
-            _id
-            discordID
-            uuid
-            date
-            */
-            axios.get("https://localhost:4001/requests/discord/member?id=" + user.discordID).then(user => {
-                if(user) res();
-                else rej();
-            }).catch(() => rej());
-        }).catch(() => {
-            db.collection("members-mc").insertOne({_id: generateID(), discordID: undefined, uuid, date: new Date()});
-
-            rej();
-        });
     });
 }

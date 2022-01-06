@@ -25,32 +25,56 @@ MongoClient.connect(runType == "Dev" ? "mongodb://localhost:27017/" : 'mongodb:/
     db = client.db(dbName + (runType == "Dev" ? "-dev" : ""));
 });
 
-import { auth, token } from "./microsoft";
+import * as Microsoft from "./microsoft";
+import * as Mojang from "./mojang";
 
 app.get("*", (req, res) => {
 
 });
 
 app.post("/microsoft/login", (req, res) => {
-    if (req.body && req.body.flow) auth("login", req.body.flow).then(r => {
-        console.log(r);
-        res.status(r.response.status).json(r.response.data);
+    if (req.body && req.body.flow) Microsoft.auth("login", req.body.flow).then(r => {
+        res.status(r.status).json(r.data);
     }).catch(r => {
-        console.log(r);
         res.status(r.response.status).json(r.response.data);
     });
-    else res.status(400).json({error: "InvalidBody", messageError: "Code provides is null or wrong"});
+    else res.status(400).json({ error: "InvalidBody", messageError: "Code provides is null or wrong" });
 });
 
 app.post("/microsoft/token", (req, res) => {
-    if (req.body && req.body.accessToken && req.body.refreshToken) token(req.body.accessToken, req.body.refreshToken).then(r => {
-        console.log(r);
-        res.status(r.response.status).json(r.response.data);
+    if (req.body && req.body.accessToken && req.body.refreshToken && req.query.uuid) Microsoft.token(req.body.accessToken, req.body.refreshToken, req.body.uuid).then(r => {
+        res.status(r.status).json(r.data);
     }).catch(r => {
-        console.log(r);
         res.status(r.response.status).json(r.response.data);
     });
-    else res.status(400).json({error: "InvalidBody", messageError: "Access token and/or refresh token are null"});
+    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or refresh token and/or client uuid are null" });
+});
+
+app.post("/mojang/login", (req, res) => {
+    if (req.body && req.body.username && req.body.password) Mojang.auth(req.body.username, req.body.password).then(r => {
+        res.status(r.status).json(r.data);
+    }).catch(r => {
+        res.status(r.response.status).json(r.response.data);
+    });
+    else res.status(400).json({ error: "InvalidBody", messageError: "Username or password are invalid" });
+});
+
+app.post("/mojang/token", (req, res) => {
+    if (req.body && req.body.accessToken && req.body.clientToken && req.body.uuid) Mojang.token(req.body.accessToken, req.body.clientToken, req.body.uuid).then(r => {
+        res.status(r.status).json(r.data);
+    }).catch(r => {
+        res.status(r.response.status).json(r.response.data);
+    });
+    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or client token and/or client uuid are null" });
+});
+
+app.post("/mojang/invalidate", (req, res) => {
+    if (req.body && req.body.accessToken && req.body.clientToken) Mojang.invalidate(req.body.accessToken, req.body.clientToken).then(r => {
+        res.status(r.status).json(r.data);
+    }).catch(r => {
+        res.status(r.response.status).json(r.response.data);
+    });
+    else res.status(400).json({ error: "InvalidBody", messageError: "Access token and/or client token are null" });
 });
 
 export function generateID() {
@@ -61,4 +85,26 @@ export function generateID() {
         b += a[j];
     }
     return b;
+}
+
+export function verifUser(uuid) {
+    return new Promise((res, rej) => {
+        if (!uuid) rej();
+        db.collection("members-mc").findOne({ uuid }).then(user => {
+            /*
+            _id
+            discordID
+            uuid
+            date
+            */
+            axios.get("https://localhost:4001/requests/discord/member?id=" + user.discordID).then(user => {
+                if (user) res();
+                else rej();
+            }).catch(() => rej());
+        }).catch(() => {
+            db.collection("members-mc").insertOne({ _id: generateID(), discordID: undefined, uuid, date: new Date() });
+
+            rej();
+        });
+    });
 }
