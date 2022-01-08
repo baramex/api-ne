@@ -9,25 +9,20 @@ import axios from "axios";
 
 import mongo from "mongodb";
 const MongoClient = mongo.MongoClient;
-const dbName = 'new-empires';
+
 /**
  * @type {mongo.Db}
  */
 export var db;
 
-/**
- * @type {"Release" | "Dev"}
- */
-const runType = "Dev";
+const guildID = require("./tokens.json").guildID;
+const clientID = require("./tokens.json").clientID;
+const clientSecret = require("./tokens.json").clientSecret;
+const botToken = require("./tokens.json").botToken;
 
-const guildID = "918065722016542771";
-const clientID = "918066264029671494";
-const clientSecret = "B4yr9o9a6xFHKPibB0PUlHObks6OQcIR";
-const botToken = "OTE4MDY2MjY0MDI5NjcxNDk0.YbB11g.60RxOgG-thHLmOonP0SO1aSRcJA";
-
-MongoClient.connect(runType == "Dev" ? "mongodb://localhost:27017/" : 'mongodb://baramex:***REMOVED***@localhost:27017/', function (err, client) {
+MongoClient.connect(require("./tokens.json").mongodbLink, function (err, client) {
     console.log("Connected successfully to mongodb");
-    db = client.db(dbName + (runType == "Dev" ? "-dev" : ""));
+    db = client.db(require("./tokens.json").dbName);
 });
 
 import * as Microsoft from "./microsoft.js";

@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "baramex",
-  "license": "ISC",
+  "license": "all rights reserved",
   "dependencies": {
     "axios": "^0.24.0",
     "body-parser": "^1.19.1",
