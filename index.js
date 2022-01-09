@@ -4,6 +4,7 @@ import bodyParser from "body-parser";
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 const server = app.listen(3521);
+require("dotenv").config();
 
 import axios from "axios";
 
@@ -15,14 +16,11 @@ const MongoClient = mongo.MongoClient;
  */
 export var db;
 
-const guildID = require("./tokens.json").guildID;
-const clientID = require("./tokens.json").clientID;
-const clientSecret = require("./tokens.json").clientSecret;
-const botToken = require("./tokens.json").botToken;
+const {GUILD_ID: guildID, CLIENT_ID: clientID, CLIENT_SECRET: clientSecret, BOT_TOKEN: botToken} = process.env;
 
-MongoClient.connect(require("./tokens.json").mongodbLink, function (err, client) {
+MongoClient.connect(process.env.DB, function (err, client) {
     console.log("Connected successfully to mongodb");
-    db = client.db(require("./tokens.json").dbName);
+    db = client.db(process.env.DB_NAME);
 });
 
 import * as Microsoft from "./microsoft.js";
