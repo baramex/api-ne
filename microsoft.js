@@ -1,6 +1,6 @@
-import axios from "axios";
-import jwt from "jsonwebtoken";
-import { getProfilFromAccessToken, verifUser } from "./index.js";
+const axios = require("axios");
+const jwt = require("jsonwebtoken");
+const { getProfilFromAccessToken, verifUser } = require("./profil")
 
 const config = {
     auth: {
@@ -14,7 +14,7 @@ const authCodeUrlParameters = {
     scopes: ["XboxLive.signin", "offline_access"]
 };
 
-export function auth(type, value) {
+function auth(type, value) {
     return new Promise((res, rej) => {
         const dataToken = type == "login" ? `client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&code=${value}&grant_type=authorization_code&redirect_uri=${authCodeUrlParameters.redirectUri}` : `client_id=${config.auth.clientId}&client_secret=${config.auth.clientSecret}&refresh_token=${value}&grant_type=refresh_token&redirect_uri=${authCodeUrlParameters.redirectUri}`;
         axios.post("https://login.live.com/oauth20_token.srf", dataToken, { headers: { "Content-Type": "application/x-www-form-urlencoded" } }).then(data => {
@@ -81,7 +81,7 @@ function validate(accessToken) {
     });
 }
 
-export function token(accessToken, refreshToken) {
+function token(accessToken, refreshToken) {
     return new Promise((res, rej) => {
         validate(accessToken).then(profile => {
             verifUser(profile.id).then(discordLinked => {
@@ -92,3 +92,6 @@ export function token(accessToken, refreshToken) {
         });
     });
 }
+
+module.exports.auth = auth;
+module.exports.token = token;

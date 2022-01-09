@@ -1,7 +1,7 @@
-import axios from "axios";
-import { getProfilFromAccessToken, verifUser } from "./index.js";
+const axios = require("axios");
+const { getProfilFromAccessToken, verifUser } = require("./profil");
 
-export function auth(username, password) {
+function auth(username, password) {
     return new Promise((res, rej) => {
         axios.post("https://authserver.mojang.com/authenticate", {
             agent: {
@@ -30,7 +30,7 @@ function refresh(accessToken, clientToken) {
     });
 }
 
-export function invalidate(accessToken, clientToken) {
+function invalidate(accessToken, clientToken) {
     return new Promise((res, rej) => {
         axios.post("https://authserver.mojang.com/invalidate", {
             accessToken,
@@ -45,7 +45,7 @@ function validate(accessToken, clientToken) {
     });
 }
 
-export function token(accessToken, clientToken) {
+function token(accessToken, clientToken) {
     return new Promise((res, rej) => {
         validate(accessToken, clientToken).then(() => {
             getProfilFromAccessToken(accessToken).then((profile) => {
@@ -58,3 +58,7 @@ export function token(accessToken, clientToken) {
         });
     });
 }
+
+module.exports.token = token;
+module.exports.auth = auth;
+module.exports.invalidate = invalidate;

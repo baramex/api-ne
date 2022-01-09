@@ -1,32 +1,78 @@
-import express from "express";
+const express = require("express");
 const app = express();
-import bodyParser from "body-parser";
+const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 const server = app.listen(3521);
 require("dotenv").config();
 
-import axios from "axios";
+const axios = require("axios");
 
-import mongo from "mongodb";
+const mongo = require("mongodb");
 const MongoClient = mongo.MongoClient;
 
 /**
  * @type {mongo.Db}
  */
-export var db;
+var db;
 
-const {GUILD_ID: guildID, CLIENT_ID: clientID, CLIENT_SECRET: clientSecret, BOT_TOKEN: botToken} = process.env;
+const { GUILD_ID: guildID, CLIENT_ID: clientID, CLIENT_SECRET: clientSecret, BOT_TOKEN: botToken } = process.env;
 
 MongoClient.connect(process.env.DB, function (err, client) {
     console.log("Connected successfully to mongodb");
     db = client.db(process.env.DB_NAME);
 });
 
-import * as Microsoft from "./microsoft.js";
-import * as Mojang from "./mojang.js";
+const Mojang = require("./mojang");
+const Microsoft = require("./microsoft");
+const { getProfilFromAccessToken } = require("./profil");
+
+var bans = [];
+var requests = [];
+var lastUpdate = new Date();
 
 app.post("*", (req, res, next) => {
+    var client_ip;
+    if (req.headers['cf-connecting-ip'] && req.headers['cf-connecting-ip'].split(', ').length) {
+        var first = req.headers['cf-connecting-ip'].split(', ');
+        client_ip = first[0];
+    } else {
+        client_ip = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress;
+    }
+
+    var date10m = new Date();
+    date10m.setMinutes(date10m.getMinutes() - 10);
+
+    if (new Date().getTime() - lastUpdate.getTime() >= 5000) {
+        requests = requests.filter(a => a.date > date10m.getTime());
+        bans = bans.filter(a => a.end > new Date().getTime());
+        lastUpdate = new Date();
+    }
+
+    var ban = bans.find(a => a.ip == client_ip);
+    if (ban) {
+        return res.status(403).json({ error: "TooManyRequests", time: ban.end - new Date().getTime() })
+    }
+
+    var curr = requests.filter(a => a.ip == client_ip);
+
+    var date5s = new Date();
+    date5s.setSeconds(date5s.getSeconds() - 10);
+
+    var reqs5s = curr.filter(a => a.date > date5s.getTime()).length;
+    var reqs10m = curr.filter(a => a.date > date10m.getTime()).length;
+
+    if (reqs5s > 3) {
+        bans.push({ ip: client_ip, end: new Date().getTime() + 1000 * 15 });
+    }
+
+    if (reqs10m > 30) {
+        bans.push({ ip: client_ip, end: new Date().getTime() + 1000 * 60 });
+        requests = requests.filter(a => a.ip != client_ip);
+    }
+
+    requests.push({ ip: client_ip, date: new Date().getTime() });
+
     next();
 });
 
@@ -83,22 +129,24 @@ app.post("/discord-auth", (req, res) => {
 
             getProfilFromAccessToken(req.body.accessToken).then(mc => {
                 axios.get("https://discord.com/api/users/@me", { headers: { authorization: tokenType + " " + accessToken } }).then(user => {
-                    axios.get("https://discord.com/api/users/@me/guilds", { headers: { authorization: tokenType + " " + accessToken } }).then(r => {
-                        if (r.data.find(a => a.id == guildID)) {
-                            res.status(200).json({ addToServer: false });
-                            updateMinecraftAccount(user.data.id, mc.id);
-                            revokeToken(accessToken);
-                        }
-                        else {
+                    db.collection("members-mc").findOne({ discordID: user.date.id }).catch(() => res.status(400).json({ error: "AccountAlreadyUsed", messageError: "Discord account is already used" })).then(() => {
+                        axios.get("https://discord.com/api/users/@me/guilds", { headers: { authorization: tokenType + " " + accessToken } }).then(r => {
+                            if (r.data.find(a => a.id == guildID)) {
+                                res.status(200).json({ addToServer: false });
+                                updateMinecraftAccount(user.data.id, mc.id);
+                                revokeToken(accessToken);
+                            }
+                            else {
 
-                            axios.put("https://discord.com/api/guilds/" + guildID + "/members/" + user.data.id, { access_token: accessToken }, { headers: { "Content-Type": "application/json", authorization: "Bot " + botToken } })
-                                .then(() => {
-                                    res.status(200).json({ addToServer: true });
-                                    updateMinecraftAccount(user.data.id, mc.id);
-                                    revokeToken(accessToken);
-                                }).catch(err => res.status(400).json(err.response.data));
-                        }
-                    }).catch(err => res.status(400).json(err.response.data));
+                                axios.put("https://discord.com/api/guilds/" + guildID + "/members/" + user.data.id, { access_token: accessToken }, { headers: { "Content-Type": "application/json", authorization: "Bot " + botToken } })
+                                    .then(() => {
+                                        res.status(200).json({ addToServer: true });
+                                        updateMinecraftAccount(user.data.id, mc.id);
+                                        revokeToken(accessToken);
+                                    }).catch(err => res.status(400).json(err.response.data));
+                            }
+                        }).catch(err => res.status(400).json(err.response.data));
+                    });
                 }).catch(err => res.status(400).json(err.response.data));
             }).catch(() => {
                 res.status(400).json({ error: "InvalidToken", messageError: "Account not found" });
@@ -121,7 +169,7 @@ function updateMinecraftAccount(discordID, uuid) {
     db.collection("members-mc").findOneAndUpdate({ uuid }, { $set: { discordID } }).catch(console.error);
 }
 
-export function generateID() {
+function generateID() {
     var a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".split("");
     var b = "";
     for (var i = 0; i < 16; i++) {
@@ -129,29 +177,4 @@ export function generateID() {
         b += a[j];
     }
     return b;
-}
-
-export function verifUser(uuid) {
-    return new Promise((res, rej) => {
-        if (!uuid) res(false);
-        db.collection("members-mc").findOne({ uuid }).then(user => {
-            axios.get("https://discord.com/api/guilds/" + guildID + "/members/" + user.discordID, { headers: { authorization: "Bot " + botToken } }).then(user => {
-                if (user) res(true);
-                else res(false);
-            }).catch(() => res(false));
-        }).catch(() => {
-            db.collection("members-mc").insertOne({ _id: generateID(), discordID: undefined, uuid, date: new Date() });
-
-            res(false);
-        });
-    });
-}
-
-export function getProfilFromAccessToken(accessToken) {
-    return new Promise((res, rej) => {
-        axios.get("https://api.minecraftservices.com/minecraft/profile", { headers: { "Accept": "application/json", "Authorization": "Bearer " + accessToken } })
-            .then(mc => {
-                res(mc.data);
-            }).catch(err => rej(err.response.data));
-    });
 }
