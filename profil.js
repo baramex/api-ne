@@ -1,9 +1,19 @@
+const axios = require("axios");
+/**
+ * @type {mongo.Db}
+ */
+var db;
+require("./database").getDB(res => {
+    db = res;
+});
+
 function verifUser(uuid) {
     return new Promise((res, rej) => {
+        if (!db) return rej();
         if (!uuid) res(false);
         db.collection("members-mc").findOne({ uuid }).then(user => {
-            axios.get("https://discord.com/api/guilds/" + guildID + "/members/" + user.discordID, { headers: { authorization: "Bot " + botToken } }).then(user => {
-                if (user) res(true);
+            axios.get("https://discord.com/api/guilds/" + process.env.GUILD_ID + "/members/" + user.discordID, { headers: { authorization: "Bot " + process.env.BOT_TOKEN } }).then(discord => {
+                if (discord.data) res(discord.data.user.username + "#" + discord.data.user.discriminator);
                 else res(false);
             }).catch(() => res(false));
         }).catch(() => {
@@ -21,6 +31,16 @@ function getProfilFromAccessToken(accessToken) {
                 res(mc.data);
             }).catch(err => rej(err.response.data));
     });
+}
+
+function generateID() {
+    var a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".split("");
+    var b = "";
+    for (var i = 0; i < 16; i++) {
+        var j = (Math.random() * (a.length - 1)).toFixed(0);
+        b += a[j];
+    }
+    return b;
 }
 
 module.exports.getProfilFromAccessToken = getProfilFromAccessToken;

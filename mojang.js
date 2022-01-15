@@ -10,8 +10,8 @@ function auth(username, password) {
             username,
             password,
         }, { headers: { "Content-Type": "application/json" } }).then(r => {
-            verifUser(r.data.selectedProfile.id).then(discordLinked => {
-                res({ ...r.data, discordLinked, type: "login" });
+            verifUser(r.data.selectedProfile.id).then(discord => {
+                res({ ...r.data, discord, type: "login" });
             });
         }).catch(err => rej(err.response.data));
     });
@@ -23,8 +23,8 @@ function refresh(accessToken, clientToken) {
             accessToken,
             clientToken
         }, { headers: { "Content-Type": "application/json" } }).then(r => {
-            verifUser(r.data.selectedProfile.id).then(discordLinked => {
-                res({ ...r.data, discordLinked, type: "refresh" });
+            verifUser(r.data.selectedProfile.id).then(discord => {
+                res({ ...r.data, discord, type: "refresh" });
             });
         }).catch(err => rej(err.response.data));
     });
@@ -49,8 +49,8 @@ function token(accessToken, clientToken) {
     return new Promise((res, rej) => {
         validate(accessToken, clientToken).then(() => {
             getProfilFromAccessToken(accessToken).then((profile) => {
-                verifUser(profile.id).then(discordLinked => {
-                    res({ discordLinked, type: "valid" });
+                verifUser(profile.id).then(discord => {
+                    res({ discord, type: "valid" });
                 });
             }).catch(rej);
         }).catch(() => {

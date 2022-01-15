@@ -8,20 +8,15 @@ require("dotenv").config();
 
 const axios = require("axios");
 
-const mongo = require("mongodb");
-const MongoClient = mongo.MongoClient;
-
 /**
  * @type {mongo.Db}
  */
 var db;
+require("./database").getDB(res => {
+    db = res;
+});
 
 const { GUILD_ID: guildID, CLIENT_ID: clientID, CLIENT_SECRET: clientSecret, BOT_TOKEN: botToken } = process.env;
-
-MongoClient.connect(process.env.DB, function (err, client) {
-    console.log("Connected successfully to mongodb");
-    db = client.db(process.env.DB_NAME);
-});
 
 const Mojang = require("./mojang");
 const Microsoft = require("./microsoft");
@@ -124,34 +119,52 @@ app.post("/mojang/invalidate", (req, res) => {
 app.post("/discord-auth", (req, res) => {
     if (req.body && req.body.code && req.body.accessToken && req.body.redirectUri) {
         axios.post("https://discord.com/api/oauth2/token", `client_id=${clientID}&client_secret=${clientSecret}&grant_type=authorization_code&code=${req.body.code}&redirect_uri=${req.body.redirectUri}`, { 'Content-Type': 'application/x-www-form-urlencoded' }).then(result => {
+            if (!result) return res.sendStatus(400);
             var accessToken = result.data.access_token;
             var tokenType = result.data.token_type;
 
             getProfilFromAccessToken(req.body.accessToken).then(mc => {
+                if (!mc) return res.sendStatus(400);
                 axios.get("https://discord.com/api/users/@me", { headers: { authorization: tokenType + " " + accessToken } }).then(user => {
-                    db.collection("members-mc").findOne({ discordID: user.date.id }).catch(() => res.status(400).json({ error: "AccountAlreadyUsed", messageError: "Discord account is already used" })).then(() => {
+                    if (!user) return res.sendStatus(400);
+                    if (!db) return res.sendStatus(400);
+                    db.collection("members-mc").findOne({ discordID: user.data.id }).catch(() => {
+                        res.sendStatus(400);
+                    }).then(u => {
+                        if(u) return res.status(400).json({ error: "AccountAlreadyUsed", messageError: "Discord account is already used" });
                         axios.get("https://discord.com/api/users/@me/guilds", { headers: { authorization: tokenType + " " + accessToken } }).then(r => {
+                            if (!r) return res.sendStatus(400);
                             if (r.data.find(a => a.id == guildID)) {
-                                res.status(200).json({ addToServer: false });
+                                res.status(200).json({ addToServer: false, discord: user.data.tag });
                                 updateMinecraftAccount(user.data.id, mc.id);
                                 revokeToken(accessToken);
                             }
                             else {
-
-                                axios.put("https://discord.com/api/guilds/" + guildID + "/members/" + user.data.id, { access_token: accessToken }, { headers: { "Content-Type": "application/json", authorization: "Bot " + botToken } })
-                                    .then(() => {
-                                        res.status(200).json({ addToServer: true });
-                                        updateMinecraftAccount(user.data.id, mc.id);
-                                        revokeToken(accessToken);
-                                    }).catch(err => res.status(400).json(err.response.data));
+                                axios.put("https://discord.com/api/guilds/" + guildID + "/members/" + user.data.id, { access_token: accessToken }, { headers: { "Content-Type": "application/json", authorization: "Bot " + botToken } }).then(() => {
+                                    res.status(200).json({ addToServer: true, discord: user.data.tag });
+                                    updateMinecraftAccount(user.data.id, mc.id);
+                                    revokeToken(accessToken);
+                                }).catch(err => {
+                                    if (!err.response) return res.sendStatus(400);
+                                    res.status(400).json(err.response.data);
+                                });
                             }
-                        }).catch(err => res.status(400).json(err.response.data));
+                        }).catch(err => {
+                            if (!err.response) return res.sendStatus(400);
+                            res.status(400).json(err.response.data);
+                        });
                     });
-                }).catch(err => res.status(400).json(err.response.data));
+                }).catch(err => {
+                    if (!err.response) return res.sendStatus(400);
+                    res.status(400).json(err.response.data);
+                });
             }).catch(() => {
                 res.status(400).json({ error: "InvalidToken", messageError: "Account not found" });
             });
-        }).catch(err => res.status(400).json(err.response.data));
+        }).catch(err => {
+            if (!err.response) return res.sendStatus(400);
+            res.status(400).json(err.response.data);
+        });
     }
     else {
         res.status(400).json({ error: "InvalidBody", messageError: "Code and/or access token and/or redirect uri are null" });
@@ -161,20 +174,17 @@ app.post("/discord-auth", (req, res) => {
 function revokeToken(accessToken) {
     return new Promise((res, rej) => {
         axios.post("https://discord.com/api/oauth2/token/revoke", `client_id=${clientID}&client_secret=${clientSecret}&token=${accessToken}`, { headers: { "Content-Type": "application/x-www-form-urlencoded" } })
-            .then(r => res(r.data)).catch(r => rej(r.response.data));
+            .then(r => {
+                if (!r) return rej();
+                res(r.data)
+            }).catch(r => {
+                if (!r.response) return rej();
+                rej(r.response.data);
+            });
     });
 }
 
 function updateMinecraftAccount(discordID, uuid) {
+    if (!db) return null;
     db.collection("members-mc").findOneAndUpdate({ uuid }, { $set: { discordID } }).catch(console.error);
-}
-
-function generateID() {
-    var a = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".split("");
-    var b = "";
-    for (var i = 0; i < 16; i++) {
-        var j = (Math.random() * (a.length - 1)).toFixed(0);
-        b += a[j];
-    }
-    return b;
 }

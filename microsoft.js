@@ -51,8 +51,8 @@ function auth(type, value) {
                                 .then(acc => {
                                     getProfilFromAccessToken(acc.data.access_token)
                                         .then(mc => {
-                                            verifUser(mc.id).then(discordLinked => {
-                                                res({ auth: acc.data, user: mc, refreshToken: auth.refresh_token, discordLinked, type });
+                                            verifUser(mc.id).then(discord => {
+                                                res({ auth: acc.data, user: mc, refreshToken: auth.refresh_token, discord, type });
                                             });
                                         }).catch(rej);
                                 }).catch(err => rej(err.response.data));
@@ -84,8 +84,8 @@ function validate(accessToken) {
 function token(accessToken, refreshToken) {
     return new Promise((res, rej) => {
         validate(accessToken).then(profile => {
-            verifUser(profile.id).then(discordLinked => {
-                res({ discordLinked, type: "valid" });
+            verifUser(profile.id).then(discord => {
+                res({ discord, type: "valid" });
             });
         }).catch(() => {
             refresh(refreshToken).then(res).catch(rej);
